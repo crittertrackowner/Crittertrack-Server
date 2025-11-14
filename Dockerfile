@@ -1,5 +1,5 @@
 # Use the official Eclipse Temurin image for a stable Java environment
-FROM eclipse-temurin:21-jdk-focal
+FROM docker.io/library/eclipse-temurin:21-jdk-focal
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -18,7 +18,7 @@ RUN chmod +x gradlew
 RUN ./gradlew installDist
 
 # Use the lighter JRE for the final run stage
-FROM eclipse-temurin:21-jre-focal
+FROM docker.io/library/eclipse-temurin:21-jre-focal
 
 # Set the working directory
 WORKDIR /app
