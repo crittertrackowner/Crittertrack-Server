@@ -16,10 +16,10 @@ import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.StringColumnType
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 
-// FIX: Extend IdTable<String> and correctly define 'id' using .entityId()
+// --- CORRECTED USERS TABLE ---
 object Users : IdTable<String>("users") {
-    // Defines the primary key as a String (UUID)
-    override val id: Column<EntityID<String>> = varchar("id", 128).entityId()
+    // FIX 1: Added .uniqueIndex() to explicitly enforce uniqueness for the foreign key reference
+    override val id: Column<EntityID<String>> = varchar("id", 128).entityId().uniqueIndex()
     
     val email = varchar("email", 255).uniqueIndex()
     val passwordHash = varchar("passwordhash", 255)
