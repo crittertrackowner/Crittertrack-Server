@@ -1,5 +1,5 @@
 # Stage 1: Build the Application
-FROM eclipse-temurin:21-jdk-jammy AS build
+FROM eclipse-temurin:17-jdk-jammy AS build
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -16,7 +16,7 @@ RUN chmod +x ./gradlew
 RUN ./gradlew clean installDist
 
 # Stage 2: Final Runtime Image (much smaller)
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:17-jre-jammy
 
 # Set the working directory
 WORKDIR /app
