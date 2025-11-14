@@ -1,33 +1,31 @@
-# Use the official Eclipse Temurin image for a stable Java environment
-FROM eclipse-temurin:21-jdk-jammy
+# Stage 1: Build the Application
+FROM eclipse-temurin:21-jdk-jammy AS build
 
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy the Gradle wrapper files and source code
-COPY gradlew .
-COPY gradle gradle
-COPY build.gradle.kts .
-COPY settings.gradle.kts .
-COPY src src
+# Copy ALL local files into the container's /app directory.
+# This ensures all gradlew, gradle folders, and source code are available.
+COPY . .
 
-# Make the wrapper executable
-RUN chmod +x gradlew
+# Ensure the wrapper is executable
+RUN chmod +x ./gradlew
 
 # Build the Ktor application and install it (creates the build/install directory)
-RUN ./gradlew installDist
+# We will use 'clean installDist' to ensure a fresh, full build.
+RUN ./gradlew clean installDist
 
-# Use the lighter JRE for the final run stage
+# Stage 2: Final Runtime Image (much smaller)
 FROM eclipse-temurin:21-jre-jammy
 
 # Set the working directory
 WORKDIR /app
 
 # Copy only the installed application from the build stage
-COPY --from=0 /app/build/install/CritterTrack-Server CritterTrack-Server
+COPY --from=build /app/build/install/CritterTrack-Server CritterTrack-Server
 
 # Set the entry point to run your application's startup script
 ENTRYPOINT ["/app/CritterTrack-Server/bin/CritterTrack-Server"]
 
-# Expose the default Ktor port (8080 or the one read from PORT)
+# Expose the default Ktor port
 EXPOSE 8080
