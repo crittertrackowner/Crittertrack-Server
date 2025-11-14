@@ -39,7 +39,7 @@ object Animals : IdTable<String>("animals") {
 
     // Foreign Key to Users table
     // Correctly defines the foreign key relationship to the String ID of the Users table
-    val userId = reference("user_id", Users.id)
+    val userId = reference("user_id", Users.id, onDelete = ReferenceOption.CASCADE)
     
     // Animal Details
     val name = varchar("name", 1024).nullable()
