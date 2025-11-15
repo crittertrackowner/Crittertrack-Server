@@ -1,6 +1,6 @@
 package com.example.plugins
 
-import com.example.models.*
+import com.example.models.* // Now imports from the new Models.kt file
 import com.example.services.SUPABASE_ANON_KEY
 import com.example.services.SUPABASE_URL
 import com.example.services.SupabaseService
@@ -17,7 +17,7 @@ import java.io.File
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
 import io.ktor.http.content.streamProvider
-import java.time.LocalDate
+import io.ktor.server.plugins.contentnegotiation.* // Used here for ContentTransformationException
 
 // Initialize the Supabase Service
 private val supabaseService = SupabaseService(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -48,6 +48,9 @@ fun Application.configureRouting() {
                     call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Failed to create profile in Supabase."))
                 }
 
+            } catch (e: ContentTransformationException) {
+                // Catches serialization errors when request body is malformed
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid request body format."))
             } catch (e: Exception) {
                 call.application.log.error("Registration failed", e)
                 call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Registration failed: ${e.message}"))
@@ -71,6 +74,8 @@ fun Application.configureRouting() {
                 } else {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("User not found or profile missing."))
                 }
+            } catch (e: ContentTransformationException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid request body format."))
             } catch (e: Exception) {
                 call.application.log.error("Login failed", e)
                 call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Login failed: ${e.message}"))
@@ -339,69 +344,3 @@ fun Application.configureRouting() {
         }
     }
 }
-
-// Data models used in the API (These should ideally be in com.example.models)
-data class Animal(
-    val id: Int,
-    val userId: String,
-    val name: String,
-    val type: String,
-    val dob: LocalDate?,
-    val color: String?,
-    val gender: String?,
-    val description: String?,
-    val imageUrl: String?,
-    val isSpayedOrNeutered: Boolean
-)
-
-data class AnimalCreateRequest(
-    val name: String,
-    val type: String,
-    val dob: LocalDate?,
-    val color: String?,
-    val gender: String?,
-    val description: String?,
-    val imageUrl: String?,
-    val isSpayedOrNeutered: Boolean?
-)
-
-data class Litter(
-    val id: Int,
-    val userId: String,
-    val name: String,
-    val dob: LocalDate,
-    val count: Int,
-    val parentIds: List<Int>?
-)
-
-data class LoginRequest(val email: String, val password: String)
-data class RegisterRequest(val email: String, val password: String)
-data class LoginResponse(val token: String?, val userId: String?)
-data class ErrorResponse(val error: String)
-data class MessageResponse(val message: String)
-data class Profile(
-    val userId: String,
-    val name: String,
-    val dateJoined: LocalDate,
-    val role: String?,
-    val email: String,
-    val location: String?,
-    val phone: String?,
-    val website: String?,
-    val facebook: String?,
-    val instagram: String?,
-    val profilePictureUrl: String?,
-    val acceptsDonations: Boolean,
-    val isVerified: Boolean
-)
-data class UpdateProfileRequest(
-    val name: String,
-    val location: String?,
-    val phone: String?,
-    val website: String?,
-    val facebook: String?,
-    val instagram: String?,
-    val acceptsDonations: Boolean,
-    val isVerified: Boolean 
-)
-data class UploadResponse(val url: String)
