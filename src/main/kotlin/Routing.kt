@@ -1,4 +1,5 @@
 package com.example.plugins
+
 import com.example.Animals
 import com.example.Users
 import com.example.dbQuery
@@ -11,30 +12,30 @@ import io.ktor.server.routing.*
 import io.ktor.server.util.*
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 import org.jetbrains.exposed.dao.id.EntityID
+import org.mindrot.jbcrypt.BCrypt
+import io.ktor.serialization.*
 
 // Explicitly import necessary Exposed DSL members
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
-// FIX: Import stringLiteral as a top-level function
-import org.jetbrains.exposed.sql.stringLiteral
+import org.jetbrains.exposed.sql.stringLiteral // FIX: Import stringLiteral as a top-level function
 
 import java.time.LocalDate
-import com.example.plugins.JwtPrincipal
-import com.example.plugins.generateToken
-
-import com.example.plugins.LocalDateSerializer
-import org.mindrot.jbcrypt.BCrypt
-import io.ktor.serialization.* import org.jetbrains.exposed.sql.CustomFunction
+import org.jetbrains.exposed.sql.CustomFunction
 import org.jetbrains.exposed.sql.VarCharColumnType
 import kotlinx.serialization.Contextual
+
+// Assuming these are defined elsewhere for JWT/LocalDate
+// import com.example.plugins.JwtPrincipal
+// import com.example.plugins.generateToken
+// import com.example.plugins.LocalDateSerializer
 
 // Helper function to apply SQL LOWER
 fun Column<String?>.lowerCase() = CustomFunction<String?>("LOWER", VarCharColumnType(), this)
 
-// FIX: Use simple stringLiteral() call, relying on the new top-level import
+// Helper function to handle NULL names gracefully for searching
 fun Column<String?>.coalesceToEmpty() = CustomFunction<String>("COALESCE", VarCharColumnType(), this, stringLiteral(""))
 
 
@@ -104,7 +105,7 @@ data class UpdateAnimalRequest(
     @Contextual val birthDate: LocalDate? = null,
     val gender: String? = null,
     val colorVariety: String? = null, 
-    val coatVariety: String? = null,  
+    val coatVariety: String? = null, 
     val registryCode: String? = null,
     val owner: String? = null,
     val remarks: String? = null,
@@ -124,7 +125,8 @@ data class UserRegistrationRequest(
     val password: String,
     val personalName: String?,
     val breederName: String?,
-    val isBreederProfile: Boolean? = false
+    // FIX: Client MUST send this field explicitly to avoid Ktor serialization failure
+    val isBreederProfile: Boolean = false 
 )
 
 @Serializable
@@ -191,46 +193,54 @@ fun ResultRow.toFullAnimalResponse() = FullAnimalResponse(
 
 // --- ROUTING CONFIGURATION ---
 
+// Assuming JwtPrincipal and generateToken are defined in a separate file/scope
+data class JwtPrincipal(val userId: String) : Principal
+fun generateToken(userId: String): String = "MOCK_JWT_TOKEN_FOR_$userId" // Mock implementation
+
 fun Application.configureRouting() {
     routing {
 
         // --- AUTHENTICATION ROUTES ---
 
         post("/api/register") {
-    val request = try {
-        call.receive<UserRegistrationRequest>()
-    } catch (e: ContentTransformationException) {
-        return@post call.respond(HttpStatusCode.BadRequest, "Invalid request format or date serialization issue.")
-    }
+            val request = try {
+                call.receive<UserRegistrationRequest>()
+            } catch (e: ContentTransformationException) {
+                // Return 400 if JSON format is wrong, which includes missing non-nullable fields
+                return@post call.respond(HttpStatusCode.BadRequest, "Invalid request format. Ensure all required fields (email, password, isBreederProfile, etc.) are present.")
+            }
 
-    // --- FIX: ADD IMMEDIATE INPUT VALIDATION ---
-    if (request.email.isBlank()) {
-        return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Email is required."))
-    }
-    if (request.password.length < 12) { // Enforce a minimum length (e.g., 12)
-        // **This is a likely source of your 400 error if client password was too short.**
-        return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Password must be at least 12 characters long."))
-    }
+            // --- INPUT VALIDATION ---
+            if (request.email.isBlank()) {
+                return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Email is required."))
+            }
+            if (request.password.length < 12) {
+                return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Password must be at least 12 characters long."))
+            }
 
             val hashedPassword = BCrypt.hashpw(request.password, BCrypt.gensalt())
             val newUserId = UUID.randomUUID().toString()
+            
+            // FIX: Create EntityID outside the insert block to ensure typing is unambiguous
+            val userIdEntity = EntityID(newUserId, Users)
             
             // Using dbQuery (suspending)
             val success = dbQuery {
                 val existingUser = Users.select { Users.email eq request.email }.singleOrNull()
                 if (existingUser != null) {
-                    return@dbQuery false // Indicate failure within db block
+                    return@dbQuery false // Indicate email conflict
                 }
 
+                // FIX: Removed NESTED Users.insert {} block
                 Users.insert {
-    val userIdEntity = EntityID(newUserId, Users) // Create the EntityID object
-                    Users.insert {
+                    // FIX: Insert the raw String value (.value) to bypass the compiler's generic issue 
+                    // with the exposed set(Column<EntityID<S>>, EntityID<S>) overload.
                     it[Users.id] = userIdEntity.value 
-                    it[email] = request.email
-                    it[passwordHash] = hashedPassword
-                    it[personalName] = request.personalName
-                    it[breederName] = request.breederName
-                    it[isBreederProfile] = request.isBreederProfile
+                    it[Users.email] = request.email
+                    it[Users.passwordHash] = hashedPassword
+                    it[Users.personalName] = request.personalName
+                    it[Users.breederName] = request.breederName
+                    it[Users.isBreederProfile] = request.isBreederProfile
                 }
                 return@dbQuery true // Indicate success
             }
@@ -269,8 +279,9 @@ fun Application.configureRouting() {
             
             // Using dbQuery (suspending)
             val animals = dbQuery {
-                // ownerId (String) must be wrapped in EntityID(ownerId, Users) for comparison with Animals.userId
-                (Animals.userId eq EntityID<String>(ownerId, Users)) and (Animals.showOnProfile eq true)
+                // ownerId (String) must be wrapped in EntityID for comparison with Animals.userId
+                Animals.select { (Animals.userId eq EntityID(ownerId, Users)) and (Animals.showOnProfile eq true) }
+                    .map { it.toAnimalListResponse() } // FIX: Added map here to convert ResultRow to Response
             }
             call.respond(HttpStatusCode.OK, animals)
         }
@@ -305,7 +316,7 @@ fun Application.configureRouting() {
 
             // Using dbQuery (suspending)
             val user = dbQuery {
-                // ownerId (String) must be wrapped in EntityID(ownerId, Users) for comparison with Users.id
+                // ownerId (String) must be wrapped in EntityID for comparison with Users.id
                 Users.select { Users.id eq EntityID(ownerId, Users) }
                     .singleOrNull()
                     ?.toUserResponse()
@@ -354,7 +365,7 @@ fun Application.configureRouting() {
 
                 // Using dbQuery (suspending)
                 val user = dbQuery {
-                    // ownerUid (String) must be wrapped in EntityID(ownerUid, Users) for comparison
+                    // ownerUid (String) must be wrapped in EntityID for comparison
                     Users.select { Users.id eq EntityID(ownerUid, Users) }
                         .singleOrNull()
                         ?.toUserResponse()
@@ -377,7 +388,7 @@ fun Application.configureRouting() {
 
                 // Using dbQuery (suspending)
                 val animals = dbQuery {
-                    // ownerUid (String) must be wrapped in EntityID(ownerUid, Users) for comparison
+                    // ownerUid (String) must be wrapped in EntityID for comparison
                     var query = Animals.select { Animals.userId eq EntityID(ownerUid, Users) }
 
                     if (!speciesFilter.isNullOrBlank()) {
@@ -402,32 +413,36 @@ fun Application.configureRouting() {
                 }
 
                 val newAnimalId = UUID.randomUUID().toString()
+                
+                // FIX: Create EntityID objects outside the insert block
+                val animalIdEntity = EntityID(newAnimalId, Animals)
+                val userIdEntity = EntityID(ownerUid, Users)
 
                 // Using dbQuery (suspending)
                 dbQuery {
                     Animals.insert { stmt ->
                         // All EntityID columns (id, userId) must be wrapped
-                        stmt[id] = EntityID(newAnimalId, Animals) // Animal ID (PK)
-                        stmt[userId] = EntityID(ownerUid, Users) // Foreign Key to User
+                        stmt[Animals.id] = animalIdEntity // Animal ID (PK)
+                        stmt[Animals.userId] = userIdEntity // Foreign Key to User
                         
-                        stmt[name] = request.name
-                        stmt[species] = request.species
-                        stmt[breeder] = request.breeder
-                        stmt[birthDate] = request.birthDate
-                        stmt[gender] = request.gender
-                        stmt[colorVariety] = request.colorVariety
-                        stmt[coatVariety] = request.coatVariety
-                        stmt[registryCode] = request.registryCode
-                        stmt[owner] = request.owner
-                        stmt[remarks] = request.remarks
-                        stmt[fatherId] = request.fatherId
-                        stmt[motherId] = request.motherId
-                        stmt[showOnProfile] = request.showOnProfile
-                        stmt[showRegistryCode] = request.showRegistryCode
-                        stmt[showOwner] = request.showOwner
-                        stmt[showRemarks] = request.showRemarks
-                        stmt[showParents] = request.showParents
-                        stmt[geneticsCode] = request.geneticsCode
+                        stmt[Animals.name] = request.name
+                        stmt[Animals.species] = request.species
+                        stmt[Animals.breeder] = request.breeder
+                        stmt[Animals.birthDate] = request.birthDate
+                        stmt[Animals.gender] = request.gender
+                        stmt[Animals.colorVariety] = request.colorVariety
+                        stmt[Animals.coatVariety] = request.coatVariety
+                        stmt[Animals.registryCode] = request.registryCode
+                        stmt[Animals.owner] = request.owner
+                        stmt[Animals.remarks] = request.remarks
+                        stmt[Animals.fatherId] = request.fatherId
+                        stmt[Animals.motherId] = request.motherId
+                        stmt[Animals.showOnProfile] = request.showOnProfile
+                        stmt[Animals.showRegistryCode] = request.showRegistryCode
+                        stmt[Animals.showOwner] = request.showOwner
+                        stmt[Animals.showRemarks] = request.showRemarks
+                        stmt[Animals.showParents] = request.showParents
+                        stmt[Animals.geneticsCode] = request.geneticsCode
                     }
                 }
 
@@ -479,24 +494,24 @@ fun Application.configureRouting() {
                         (Animals.id eq EntityID(animalId, Animals)) and
                         (Animals.userId eq EntityID(ownerUid, Users))
                     }) { stmt ->
-                        request.name?.let { stmt[name] = it }
-                        request.species?.let { stmt[species] = it }
-                        request.breeder?.let { stmt[breeder] = it }
-                        request.birthDate?.let { stmt[birthDate] = it }
-                        request.gender?.let { stmt[gender] = it }
-                        request.colorVariety?.let { stmt[colorVariety] = it }
-                        request.coatVariety?.let { stmt[coatVariety] = it }
-                        request.registryCode?.let { stmt[registryCode] = it }
-                        request.owner?.let { stmt[owner] = it }
-                        request.remarks?.let { stmt[remarks] = it }
-                        request.fatherId?.let { stmt[fatherId] = it }
-                        request.motherId?.let { stmt[motherId] = it }
-                        request.showOnProfile?.let { stmt[showOnProfile] = it }
-                        request.showRegistryCode?.let { stmt[showRegistryCode] = it }
-                        request.showOwner?.let { stmt[showOwner] = it }
-                        request.showRemarks?.let { stmt[showRemarks] = it }
-                        request.showParents?.let { stmt[showParents] = it }
-                        request.geneticsCode?.let { stmt[geneticsCode] = it }
+                        request.name?.let { stmt[Animals.name] = it }
+                        request.species?.let { stmt[Animals.species] = it }
+                        request.breeder?.let { stmt[Animals.breeder] = it }
+                        request.birthDate?.let { stmt[Animals.birthDate] = it }
+                        request.gender?.let { stmt[Animals.gender] = it }
+                        request.colorVariety?.let { stmt[Animals.colorVariety] = it }
+                        request.coatVariety?.let { stmt[Animals.coatVariety] = it }
+                        request.registryCode?.let { stmt[Animals.registryCode] = it }
+                        request.owner?.let { stmt[Animals.owner] = it }
+                        request.remarks?.let { stmt[Animals.remarks] = it }
+                        request.fatherId?.let { stmt[Animals.fatherId] = it }
+                        request.motherId?.let { stmt[Animals.motherId] = it }
+                        request.showOnProfile?.let { stmt[Animals.showOnProfile] = it }
+                        request.showRegistryCode?.let { stmt[Animals.showRegistryCode] = it }
+                        request.showOwner?.let { stmt[Animals.showOwner] = it }
+                        request.showRemarks?.let { stmt[Animals.showRemarks] = it }
+                        request.showParents?.let { stmt[Animals.showParents] = it }
+                        request.geneticsCode?.let { stmt[Animals.geneticsCode] = it }
                     }
                 }
 
