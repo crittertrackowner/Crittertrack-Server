@@ -12,10 +12,14 @@ application {
     mainClass = "com.example.ApplicationKt"
 }
 kotlin {
-jvmToolchain(17)}
+    jvmToolchain(17)
+}
 
 dependencies {
-    implementation("io.ktor:ktor-server-cors-jvm:$ktor_version")
+    // 🌟 FIX: CORS Dependency (Ktor 2.3.8 is currently the latest stable version)
+    implementation("io.ktor:ktor-server-cors-jvm:2.3.8")
+    
+    // Ktor Dependencies
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.auth.jwt)
@@ -24,19 +28,22 @@ dependencies {
     implementation(libs.ktor.server.netty)
     implementation(libs.logback.classic)
     implementation(libs.ktor.server.config.yaml)
+
+    // Testing
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
-    implementation("org.mindrot:jbcrypt:0.4")
-    // Kotlinx Serialization Dependencies
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")       // Added version
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.6.0")    // Added version
-    implementation("io.ktor:ktor-serialization-kotlinx-json") // Ktor-specific serializer
 
+    // Hashing
+    implementation("org.mindrot:jbcrypt:0.4")
+    
+    // Kotlinx Serialization Dependencies
+    // 💡 Note: Only need the first one if libs.ktor.serialization.kotlinx.json is working
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+    
     // Database
     implementation("org.jetbrains.exposed:exposed-core:0.41.1")
     implementation("org.jetbrains.exposed:exposed-dao:0.41.1")
     implementation("org.jetbrains.exposed:exposed-jdbc:0.41.1")
-    // ✅ FIX: ADDED exposed-java-time to enable date() function for LocalDate
     implementation("org.jetbrains.exposed:exposed-java-time:0.41.1") 
     implementation("org.postgresql:postgresql:42.5.0")
     implementation("com.zaxxer:HikariCP:5.0.1")
