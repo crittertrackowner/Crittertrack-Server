@@ -13,6 +13,9 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
+import org.jetbrains.exposed.dao.id.EntityID
+import org.jetbrains.exposed.sql.Column
+import org.jetbrains.exposed.sql.wrap
 
 // Explicitly import necessary Exposed DSL members
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -28,7 +31,6 @@ import com.example.plugins.LocalDateSerializer
 import org.mindrot.jbcrypt.BCrypt
 import io.ktor.serialization.* import org.jetbrains.exposed.sql.CustomFunction
 import org.jetbrains.exposed.sql.VarCharColumnType
-import org.jetbrains.exposed.dao.id.EntityID
 import kotlinx.serialization.Contextual
 
 // Helper function to apply SQL LOWER
