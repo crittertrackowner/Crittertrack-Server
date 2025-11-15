@@ -223,7 +223,7 @@ fun Application.configureRouting() {
                 }
 
                 Users.insert {
-                   it[Users.id] = EntityID(newUserId, Users)
+                   it[Users.id] = EntityID(newUserId, Users) as EntityID<String>
                     it[email] = request.email
                     it[passwordHash] = hashedPassword
                     it[personalName] = request.personalName
