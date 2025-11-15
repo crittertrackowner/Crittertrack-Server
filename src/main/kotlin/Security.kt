@@ -1,4 +1,3 @@
-// fileName: Security.kt (NEW CONTENT for Self-Hosted JWT)
 package com.example.plugins
 
 import com.auth0.jwt.JWT
@@ -8,6 +7,9 @@ import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.http.*
 import io.ktor.server.response.*
+import io.ktor.server.plugins.cors.routing.* // <-- NEW IMPORT
+import io.ktor.http.HttpMethod // <-- NEW IMPORT
+import io.ktor.http.HttpHeaders // <-- NEW IMPORT
 import java.util.*
 
 // --- JWT Configuration Constants ---
@@ -22,11 +24,30 @@ object TokenConfig {
 }
 
 // --- Principal Definition ---
-// This replaces FirebasePrincipal.
 data class JwtPrincipal(val userId: String) : Principal 
 
 // --- Core Security Configuration ---
 fun Application.configureSecurity() {
+    
+    // 🌟 CORS CONFIGURATION FIX 🌟
+    // This block MUST be present to prevent the 400 Bad Request error from the proxy.
+    install(CORS) {
+        // Allows requests from any host (necessary for mobile apps which don't have a standard web origin)
+        anyHost() 
+        
+        // Allowed HTTP methods
+        allowMethod(HttpMethod.Options)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Put)
+        allowMethod(HttpMethod.Delete)
+        
+        // CRITICAL: Allow the headers needed by the mobile app client
+        allowHeader(HttpHeaders.Authorization) // For JWT tokens
+        allowHeader(HttpHeaders.ContentType)   // For JSON bodies
+        allowHeader("apikey")                  // <--- THE VITAL FIX for Supabase API access
+    }
+
     install(Authentication) {
         // Name the scheme "auth-jwt" for use in routes
         jwt("auth-jwt") {
