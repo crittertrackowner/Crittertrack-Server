@@ -197,11 +197,20 @@ fun Application.configureRouting() {
         // --- AUTHENTICATION ROUTES ---
 
         post("/api/register") {
-            val request = try {
-                call.receive<UserRegistrationRequest>()
-            } catch (e: ContentTransformationException) {
-                return@post call.respond(HttpStatusCode.BadRequest, "Invalid request format.")
-            }
+    val request = try {
+        call.receive<UserRegistrationRequest>()
+    } catch (e: ContentTransformationException) {
+        return@post call.respond(HttpStatusCode.BadRequest, "Invalid request format or date serialization issue.")
+    }
+
+    // --- FIX: ADD IMMEDIATE INPUT VALIDATION ---
+    if (request.email.isBlank()) {
+        return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Email is required."))
+    }
+    if (request.password.length < 12) { // Enforce a minimum length (e.g., 12)
+        // **This is a likely source of your 400 error if client password was too short.**
+        return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Password must be at least 12 characters long."))
+    }
 
             val hashedPassword = BCrypt.hashpw(request.password, BCrypt.gensalt())
             val newUserId = UUID.randomUUID().toString()
