@@ -15,6 +15,7 @@ kotlin {
 jvmToolchain(17)}
 
 dependencies {
+    implementation("io.ktor:ktor-server-cors-jvm:$ktor_version")
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.auth.jwt)
