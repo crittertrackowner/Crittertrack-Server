@@ -15,8 +15,8 @@ import java.time.LocalDate
 
 // NOTE: These should be loaded from application.conf in a real deployment
 // *** REMEMBER TO REPLACE THESE PLACEHOLDERS WITH YOUR ACTUAL SUPABASE KEYS ***
-const val SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL" // e.g., https://yourproject.supabase.co
-const val SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY" // The public API key
+const val SUPABASE_URL = "https://bkjesxgsblkfscdlioer.supabase.co" // e.g., https://yourproject.supabase.co
+const val SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJramVzeGdzYmxrZnNjZGxpb2VyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjA3NDMsImV4cCI6MjA3ODczNjc0M30.rMNo0bhIoA7F79UgpMvkzUtmYMYrji8k-Yff6e4L3cA" // The public API key
 
 /**
  * Service to handle all communication with the Supabase PostgREST API.
