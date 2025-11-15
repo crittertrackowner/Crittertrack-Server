@@ -193,10 +193,6 @@ fun ResultRow.toFullAnimalResponse() = FullAnimalResponse(
 
 // --- ROUTING CONFIGURATION ---
 
-// Assuming JwtPrincipal and generateToken are defined in a separate file/scope
-data class JwtPrincipal(val userId: String) : Principal
-fun generateToken(userId: String): String = "MOCK_JWT_TOKEN_FOR_$userId" // Mock implementation
-
 fun Application.configureRouting() {
     routing {
 
