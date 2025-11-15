@@ -124,7 +124,7 @@ data class UserRegistrationRequest(
     val password: String,
     val personalName: String?,
     val breederName: String?,
-    val isBreederProfile: Boolean
+    val isBreederProfile: Boolean? = false
 )
 
 @Serializable
