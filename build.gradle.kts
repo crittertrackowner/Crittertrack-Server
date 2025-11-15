@@ -48,6 +48,8 @@ dependencies {
     implementation("org.postgresql:postgresql:42.5.0")
     implementation("com.zaxxer:HikariCP:5.0.1")
 
+
+
     // Firebase
     implementation("com.google.firebase:firebase-admin:9.2.0")
 }
