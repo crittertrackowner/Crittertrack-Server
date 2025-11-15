@@ -48,7 +48,14 @@ dependencies {
     implementation("org.postgresql:postgresql:42.5.0")
     implementation("com.zaxxer:HikariCP:5.0.1")
 
+// Ktor Client dependencies needed by SupabaseService.kt
+implementation("io.ktor:ktor-client-core:\$ktor_version")
+implementation("io.ktor:ktor-client-cio:\$ktor_version") // For the CIO HTTP Engine
+implementation("io.ktor:ktor-client-content-negotiation:\$ktor_version")
+implementation("io.ktor:ktor-serialization-kotlinx-json:\$ktor_version")
 
+// You might also need this import if you don't have it already
+implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
 
     // Firebase
     implementation("com.google.firebase:firebase-admin:9.2.0")
