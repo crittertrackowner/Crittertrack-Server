@@ -1,3 +1,9 @@
+# Add a dummy argument that changes every time to break the cache layer
+ARG CACHE_BUSTER=1
+
+# Change the line before the build to break the cache
+RUN echo "Forcing rebuild ${CACHE_BUSTER}" > /dev/null
+
 # Stage 1: Build the Application
 FROM eclipse-temurin:17-jdk-jammy AS build
 
