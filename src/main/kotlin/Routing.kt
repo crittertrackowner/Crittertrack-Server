@@ -14,8 +14,6 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.wrap
 
 // Explicitly import necessary Exposed DSL members
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -225,7 +223,7 @@ fun Application.configureRouting() {
                 }
 
                 Users.insert {
-                   it[Users.id] = EntityID<String>(newUserId, Users)
+                   it[Users.id] = EntityID(newUserId, Users)
                     it[email] = request.email
                     it[passwordHash] = hashedPassword
                     it[personalName] = request.personalName
@@ -270,8 +268,7 @@ fun Application.configureRouting() {
             // Using dbQuery (suspending)
             val animals = dbQuery {
                 // ownerId (String) must be wrapped in EntityID(ownerId, Users) for comparison with Animals.userId
-                Animals.select { (Animals.userId eq EntityID(ownerId, Users)) and (Animals.showOnProfile eq true) }
-                    .map { it.toAnimalListResponse() }
+                (Animals.userId eq EntityID<String>(ownerId, Users)) and (Animals.showOnProfile eq true)
             }
             call.respond(HttpStatusCode.OK, animals)
         }
