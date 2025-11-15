@@ -223,13 +223,9 @@ fun Application.configureRouting() {
                 }
 
                 Users.insert {
-    // 1. Create the correct EntityID object. This constructor is guaranteed to work.
-val userIdEntity = EntityID(newUserId, Users)
-
-// 2. Insert the raw value of the EntityID object (the String UUID) 
-// into the ID column. This bypasses the compiler's generic issue 
-// with the set(column, EntityID) overload.
-it[Users.id] = userIdEntity.value
+    val userIdEntity = EntityID(newUserId, Users) // Create the EntityID object
+                    Users.insert {
+                    it[Users.id] = userIdEntity.value 
                     it[email] = request.email
                     it[passwordHash] = hashedPassword
                     it[personalName] = request.personalName
