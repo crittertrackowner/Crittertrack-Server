@@ -1,6 +1,10 @@
 package com.example.plugins
 
 import com.example.models.*
+import com.example.services.SUPABASE_ANON_KEY
+import com.example.services.SUPABASE_URL
+import com.example.services.SupabaseService
+import com.example.security.generateToken
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.http.content.*
@@ -8,32 +12,15 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.util.*
-import io.ktor.server.sessions.*
 import io.ktor.http.*
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.File
+import io.ktor.http.content.PartData
+import io.ktor.http.content.forEachPart
+import io.ktor.http.content.streamProvider
 import java.time.LocalDate
 
-// Define database operations interface or object (placeholder for actual implementation)
-object Database {
-    // --- Profile Operations ---
-    fun getProfile(userId: String): Profile? = Profile(userId, "Critter Tracker", LocalDate.now(), "Admin", "example@test.com", null, null, null, null, null, null, true, true)
-    fun updateProfile(userId: String, request: UpdateProfileRequest): Boolean = true // Mock success
-
-    // --- Animal Operations ---
-    fun getAllAnimals(userId: String): List<Animal> = listOf(Animal(1, userId, "Bella", "Dog", LocalDate.now(), null, "F", null, null, false))
-    fun createAnimal(userId: String, request: AnimalCreateRequest): Animal? = Animal(100, userId, request.name, request.type, request.dob, request.color, request.gender, request.description, request.imageUrl, request.isSpayedOrNeutered)
-    fun getAnimalById(userId: String, animalId: Int): Animal? = Animal(animalId, userId, "Bella", "Dog", LocalDate.now(), null, "F", null, null, false)
-    fun updateAnimal(userId: String, animalId: Int, request: AnimalCreateRequest): Boolean = true
-    fun deleteAnimal(userId: String, animalId: Int): Boolean = true
-
-    // --- Litter Operations ---
-    fun getAllLitters(userId: String): List<Litter> = listOf(Litter(1, userId, "First Litter", LocalDate.now(), 5, null))
-    fun createLitter(userId: String, litter: Litter): Litter? = litter.copy(id = 200)
-    fun getLitterById(userId: String, litterId: Int): Litter? = Litter(litterId, userId, "First Litter", LocalDate.now(), 5, null)
-    fun updateLitter(userId: String, litterId: Int, litter: Litter): Boolean = true
-    fun deleteLitter(userId: String, litterId: Int): Boolean = true
-}
+// Initialize the Supabase Service
+private val supabaseService = SupabaseService(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 fun Application.configureRouting() {
     routing {
@@ -46,12 +33,21 @@ fun Application.configureRouting() {
         post("/api/register") {
             try {
                 val request = call.receive<RegisterRequest>()
-                // Assuming success and JWT generation for simplicity
-                val response = LoginResponse(
-                    token = "mock-jwt-token-for-${request.email}",
-                    userId = "user-${request.email.substringBefore('@')}"
-                )
-                call.respond(HttpStatusCode.Created, response)
+                
+                // 1. MOCK: Simulate user creation and get a mock ID
+                val mockUserId = "user-${request.email.substringBefore('@')}"
+                val token = generateToken(mockUserId)
+                
+                // 2. Create or get the user's profile record in Supabase
+                val profile = supabaseService.createOrGetProfile(mockUserId, request.email, null)
+                
+                if (profile != null) {
+                    val response = LoginResponse(token = token, userId = mockUserId)
+                    call.respond(HttpStatusCode.Created, response)
+                } else {
+                    call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Failed to create profile in Supabase."))
+                }
+
             } catch (e: Exception) {
                 call.application.log.error("Registration failed", e)
                 call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Registration failed: ${e.message}"))
@@ -61,12 +57,20 @@ fun Application.configureRouting() {
         post("/api/login") {
             try {
                 val request = call.receive<LoginRequest>()
-                // Assuming success and JWT generation for simplicity
-                val response = LoginResponse(
-                    token = "mock-jwt-token-for-${request.email}",
-                    userId = "user-${request.email.substringBefore('@')}"
-                )
-                call.respond(HttpStatusCode.OK, response)
+                
+                // 1. MOCK: Simulate login success and generate Ktor JWT
+                val mockUserId = "user-${request.email.substringBefore('@')}"
+                val token = generateToken(mockUserId)
+                
+                // 2. Ensure profile exists (fetch it from Supabase)
+                val profile = supabaseService.getProfile(mockUserId)
+                
+                if (profile != null) {
+                    val response = LoginResponse(token = token, userId = mockUserId)
+                    call.respond(HttpStatusCode.OK, response)
+                } else {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("User not found or profile missing."))
+                }
             } catch (e: Exception) {
                 call.application.log.error("Login failed", e)
                 call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Login failed: ${e.message}"))
@@ -88,8 +92,7 @@ fun Application.configureRouting() {
                     val userId = call.getUserId() ?: return@get call.respond(HttpStatusCode.Unauthorized)
                     
                     try {
-                        // In a real application, you'd fetch this from the DB using a transaction
-                        val profile = Database.getProfile(userId)
+                        val profile = supabaseService.getProfile(userId)
                         if (profile != null) {
                             call.respond(HttpStatusCode.OK, profile)
                         } else {
@@ -110,11 +113,11 @@ fun Application.configureRouting() {
                     }
 
                     try {
-                        // In a real application, update the DB
-                        if (Database.updateProfile(userId, request)) {
+                        if (supabaseService.updateProfile(userId, request)) {
+                            // Fetch the updated profile to send back (optional, sending success message here)
                             call.respond(HttpStatusCode.OK, MessageResponse("Profile updated successfully."))
                         } else {
-                            call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Failed to update profile."))
+                            call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Failed to update profile in Supabase."))
                         }
                     } catch (e: Exception) {
                         call.application.log.error("Error updating profile", e)
@@ -128,7 +131,7 @@ fun Application.configureRouting() {
                     val userId = call.getUserId() ?: return@get call.respond(HttpStatusCode.Unauthorized)
                     
                     try {
-                        val animals = Database.getAllAnimals(userId)
+                        val animals = supabaseService.getAllAnimals(userId)
                         call.respond(HttpStatusCode.OK, animals)
                     } catch (e: Exception) {
                         call.application.log.error("Error fetching animals", e)
@@ -145,11 +148,11 @@ fun Application.configureRouting() {
                     }
                     
                     try {
-                        val newAnimal = Database.createAnimal(userId, request)
+                        val newAnimal = supabaseService.createAnimal(userId, request)
                         if (newAnimal != null) {
                             call.respond(HttpStatusCode.Created, newAnimal)
                         } else {
-                            call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Could not create animal."))
+                            call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Could not create animal in Supabase."))
                         }
                     } catch (e: Exception) {
                         call.application.log.error("Error creating animal", e)
@@ -162,7 +165,7 @@ fun Application.configureRouting() {
                     val animalId = call.parameters.getOrFail<Int>("id")
 
                     try {
-                        val animal = Database.getAnimalById(userId, animalId)
+                        val animal = supabaseService.getAnimalById(userId, animalId)
                         if (animal != null) {
                             call.respond(HttpStatusCode.OK, animal)
                         } else {
@@ -184,10 +187,10 @@ fun Application.configureRouting() {
                     }
 
                     try {
-                        if (Database.updateAnimal(userId, animalId, request)) {
+                        if (supabaseService.updateAnimal(userId, animalId, request)) {
                             call.respond(HttpStatusCode.OK, MessageResponse("Animal updated successfully."))
                         } else {
-                            call.respond(HttpStatusCode.NotFound, ErrorResponse("Animal not found or update failed."))
+                            call.respond(HttpStatusCode.NotFound, ErrorResponse("Animal not found or update failed in Supabase."))
                         }
                     } catch (e: Exception) {
                         call.application.log.error("Error updating animal $animalId", e)
@@ -200,7 +203,7 @@ fun Application.configureRouting() {
                     val animalId = call.parameters.getOrFail<Int>("id")
 
                     try {
-                        if (Database.deleteAnimal(userId, animalId)) {
+                        if (supabaseService.deleteAnimal(userId, animalId)) {
                             call.respond(HttpStatusCode.NoContent)
                         } else {
                             call.respond(HttpStatusCode.NotFound, ErrorResponse("Animal not found."))
@@ -217,7 +220,7 @@ fun Application.configureRouting() {
                     val userId = call.getUserId() ?: return@get call.respond(HttpStatusCode.Unauthorized)
                     
                     try {
-                        val litters = Database.getAllLitters(userId)
+                        val litters = supabaseService.getAllLitters(userId)
                         call.respond(HttpStatusCode.OK, litters)
                     } catch (e: Exception) {
                         call.application.log.error("Error fetching litters", e)
@@ -234,11 +237,11 @@ fun Application.configureRouting() {
                     }
                     
                     try {
-                        val newLitter = Database.createLitter(userId, request)
+                        val newLitter = supabaseService.createLitter(userId, request)
                         if (newLitter != null) {
                             call.respond(HttpStatusCode.Created, newLitter)
                         } else {
-                            call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Could not create litter."))
+                            call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Could not create litter in Supabase."))
                         }
                     } catch (e: Exception) {
                         call.application.log.error("Error creating litter", e)
@@ -251,7 +254,7 @@ fun Application.configureRouting() {
                     val litterId = call.parameters.getOrFail<Int>("id")
 
                     try {
-                        val litter = Database.getLitterById(userId, litterId)
+                        val litter = supabaseService.getLitterById(userId, litterId)
                         if (litter != null) {
                             call.respond(HttpStatusCode.OK, litter)
                         } else {
@@ -273,10 +276,10 @@ fun Application.configureRouting() {
                     }
 
                     try {
-                        if (Database.updateLitter(userId, litterId, request)) {
+                        if (supabaseService.updateLitter(userId, litterId, request)) {
                             call.respond(HttpStatusCode.OK, MessageResponse("Litter updated successfully."))
                         } else {
-                            call.respond(HttpStatusCode.NotFound, ErrorResponse("Litter not found or update failed."))
+                            call.respond(HttpStatusCode.NotFound, ErrorResponse("Litter not found or update failed in Supabase."))
                         }
                     } catch (e: Exception) {
                         call.application.log.error("Error updating litter $litterId", e)
@@ -289,7 +292,7 @@ fun Application.configureRouting() {
                     val litterId = call.parameters.getOrFail<Int>("id")
 
                     try {
-                        if (Database.deleteLitter(userId, litterId)) {
+                        if (supabaseService.deleteLitter(userId, litterId)) {
                             call.respond(HttpStatusCode.NoContent)
                         } else {
                             call.respond(HttpStatusCode.NotFound, ErrorResponse("Litter not found."))
@@ -306,16 +309,13 @@ fun Application.configureRouting() {
                     val multipart = call.receiveMultipart()
                     var fileName: String? = null
 
+                    // This is a local file upload. For a real app, you would use the Supabase Storage API here.
                     multipart.forEachPart { part ->
                         if (part is PartData.FileItem) {
                             val originalFileName = part.originalFileName ?: "upload_${System.currentTimeMillis()}"
-                            val fileExtension = originalFileName.substringAfterLast('.', "jpg")
-                            
-                            // Generate a unique, safe filename
                             val uniqueFileName = "${System.currentTimeMillis()}_$originalFileName"
                             val file = File("uploads/$uniqueFileName")
 
-                            // Ensure the uploads directory exists
                             file.parentFile.mkdirs() 
 
                             part.streamProvider().use { inputStream ->
@@ -329,25 +329,18 @@ fun Application.configureRouting() {
                     }
 
                     if (fileName != null) {
-                        // Return the public URL or path to the uploaded file
                         val publicUrl = call.url { path("uploads", fileName!!) }
                         call.respond(HttpStatusCode.OK, UploadResponse(publicUrl))
                     } else {
                         call.respond(HttpStatusCode.BadRequest, ErrorResponse("No file uploaded."))
                     }
                 }
-            } // Closes route("/api")
-        } // Closes authenticate("auth-jwt")
-    } // Closes routing { ... }
+            }
+        }
+    }
 }
 
-// Data models used in the API (you should have these defined elsewhere)
-// For compilation completeness, I'll include minimal definitions here.
-object Tables {
-    // Placeholder to satisfy Exposed/Database calls if they existed in the original file
-}
-
-// Assuming these models exist in com.example.models
+// Data models used in the API (These should ideally be in com.example.models)
 data class Animal(
     val id: Int,
     val userId: String,
@@ -409,6 +402,6 @@ data class UpdateProfileRequest(
     val facebook: String?,
     val instagram: String?,
     val acceptsDonations: Boolean,
-    val isVerified: Boolean // Should probably not be user-updatable, but included for completeness
+    val isVerified: Boolean 
 )
 data class UploadResponse(val url: String)
